@@ -130,7 +130,7 @@ services:
       start_period: 20s
     volumes:
       - ${GATEWAY_DIR_PATH}/config:/app/config
-      - cert:/app/cert
+      - ${GATEWAY_DIR_PATH}/cert:/app/cert
     depends_on:
       lumina-rest-api:
         condition: service_healthy
