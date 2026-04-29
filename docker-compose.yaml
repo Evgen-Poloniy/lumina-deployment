@@ -19,7 +19,7 @@ services:
       start_period: 20s
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.3
+    image: quay.io/keycloak/keycloak:26.6.1
     container_name: keycloak
     command: start
     depends_on:
@@ -28,33 +28,52 @@ services:
     environment:
       KC_HOSTNAME: ${KC_HOSTNAME}
       KC_HTTP_PORT: ${KC_PORT}
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${DB_PASSWORD}
       KC_PROXY_HEADERS: "xforwarded"
       KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HEALTH_ENABLED: "true"
       PROXY_ADDRESS_FORWARDING: "true"
     healthcheck:
       test:
         - "CMD-SHELL"
         - |
-          exec 3<>/dev/tcp/localhost/${KC_PORT} &&
+          exec 3<>/dev/tcp/localhost/9000 &&
           echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
           cat <&3 | tee /tmp/healthcheck.log | grep -q '200 OK'
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 60s
-    ports:
-      - "${KC_PORT}:${KC_PORT}"
-    # expose:
-    #   - 8080
+    expose:
+       - ${KC_PORT}
     networks:
       - lumina-net
+
+  redis:
+    image: redis:8.6.2-alpine
+    container_name: redis
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --requirepass $REDIS_PASSWORD
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    networks:
+      - lumina-net-dev
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   lumina-rest-api:
     build:
@@ -65,9 +84,11 @@ services:
     environment:
       CONFIG_PATH: /app/config/config.yaml
       API_KEY: ${LLM_API_KEY}
+      API_HOST: ${LLM_API_HOST}
+      API_PORT: ${LLM_API_PORT}
       WORKERS: 1
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5600/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${LLM_API_PORT}/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -88,7 +109,7 @@ services:
     image: lumina-platform-image
     container_name: lumina-platform
     ports:
-      - "8080:${GATEWAY_API_PORT}"
+      - "443:${GATEWAY_API_PORT}"
     environment:
       CONFIG_PATH: /app/config/config.yaml
       API_KEY: ${GATEWAY_API_KEY}
@@ -96,6 +117,11 @@ services:
       LUMINA_URL: ${LLM_URL}
       API_HOST: ${GATEWAY_API_HOST}
       API_PORT: ${GATEWAY_API_PORT}
+      CACHE_HOST: ${REDIS_HOST}
+      CACHE_PORT: ${REDIS_PORT}
+      CACHE_PASSWORD: ${REDIS_PASSWORD}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${GATEWAY_API_PORT}/health"]
       interval: 10s
@@ -104,8 +130,11 @@ services:
       start_period: 20s
     volumes:
       - ${GATEWAY_DIR_PATH}/config:/app/config
+      - cert:/app/cert
     depends_on:
       lumina-rest-api:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
     networks:
