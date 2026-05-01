@@ -61,7 +61,7 @@ services:
       redis-server
       --save ""
       --appendonly no
-      --requirepass $CASHE_PASSWORD
+      --requirepass $REDIS_PASSWORD
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
     networks:
