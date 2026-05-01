@@ -63,7 +63,7 @@ services:
       --appendonly no
       --requirepass $CASHE_PASSWORD
     ports:
-      - "${CACHE_PORT}:${CACHE_PORT}"
+      - "${REDIS_PORT}:${REDIS_PORT}"
     networks:
       - lumina-net-dev
 
