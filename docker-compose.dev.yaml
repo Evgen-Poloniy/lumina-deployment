@@ -66,7 +66,6 @@ services:
       - "${REDIS_PORT}:${REDIS_PORT}"
     networks:
       - lumina-net-dev
-
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -92,6 +91,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+    ports:
+      - "5600:5600"
     volumes:
       - ${LLM_DIR_PATH}/config:/app/config
       - ${LLM_DIR_PATH}/data:/app/data
