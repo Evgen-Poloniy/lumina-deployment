@@ -27,7 +27,6 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      KC_HOSTNAME: ${KC_HOSTNAME}
       KC_HTTP_PORT: ${KC_PORT}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
