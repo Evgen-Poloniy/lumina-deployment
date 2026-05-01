@@ -1,7 +1,5 @@
 .env
-.password
 .client-secret
-docker-compose.dev.yaml
 
 .git/
 .vscode/
