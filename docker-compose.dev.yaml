@@ -1,0 +1,112 @@
+name: lumina-llm-service-dev
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: keycloak-db-dev
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - keycloak_data_dev:/var/lib/postgresql
+    networks:
+      - lumina-net-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    container_name: keycloak-dev
+    command: start-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_HTTP_PORT: ${KC_PORT}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      PROXY_ADDRESS_FORWARDING: "true"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          exec 3<>/dev/tcp/localhost/9000 &&
+          echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          cat <&3 | tee /tmp/healthcheck.log | grep -q '200 OK'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "${KC_PORT}:${KC_PORT}"
+    networks:
+      - lumina-net-dev
+
+  redis:
+    image: redis:8.6.2-alpine
+    container_name: redis-dev
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --requirepass $REDIS_PASSWORD
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    networks:
+      - lumina-net-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  lumina-rest-api:
+    build:
+      context: ${LLM_DIR_PATH}
+      dockerfile: Dockerfile
+    image: lumina-rest-api-image
+    container_name: lumina-rest-api
+    environment:
+      CONFIG_PATH: /app/config/config.yaml
+      API_KEY: ${LLM_API_KEY}
+      API_HOST: ${LLM_API_HOST}
+      API_PORT: ${LLM_API_PORT}
+      WORKERS: 1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${LLM_API_PORT}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "5600:5600"
+    volumes:
+      - ${LLM_DIR_PATH}/config:/app/config
+      - ${LLM_DIR_PATH}/data:/app/data
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - lumina-net-dev
+
+networks:
+  lumina-net-dev:
+    name: lumina-net-dev
+    driver: bridge
+
+volumes:
+  keycloak_data_dev:
+    name: keycloak_data_dev
